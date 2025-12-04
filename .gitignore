@@ -1,0 +1,30 @@
+# Build output
+/Debug/
+/Release/
+/build/
+*.o
+*.d
+*.elf
+*.axf
+*.bin
+*.hex
+*.map
+*.lst
+*.srec
+*.su
+
+# STM32CubeIDE / Eclipse metadata
+/.settings/
+.mxproject
+*.launch
+*.log
+
+# Generated code browsing helpers
+*.uvguix.*
+*.uvoptx
+
+# Local IDE/editor settings
+.vscode/
+.idea/
+*.swp
+*.user
