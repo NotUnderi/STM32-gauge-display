@@ -1,5 +1,9 @@
 # STM32 Automotive Gauge Project
 
+<a href="https://github.com/NotUnderi/STM32-gauge-display/actions/workflows/ci.yml">
+  <img src="https://github.com/NotUnderi/STM32-gauge-display/actions/workflows/ci.yml/badge.svg">
+</a>
+
 An embedded automotive gauge built on the **STM32F407VET6** development board.  
 The project reads multiple engine and environmental parameters and displays them on an SPI-driven LCD.  
 Future goals include designing a **custom PCB** and a **vehicle-ready enclosure**.
