@@ -22,9 +22,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "ILI9341.h"
+#include "GC9A01.h"
 #include "AHT20.h"
-#include "ILI9341.h"
 #include "lvgl.h"
 /* USER CODE END Includes */
 
@@ -218,8 +217,8 @@ int main(void)
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
   AHT20_Init();
-  ILI9341_Init();
-  ILI9341_SetRotation(1);
+  GC9A01_Init();
+  GC9A01_SetRotation(1);
 
   lv_init();
   static uint16_t buf1[240 * 40];   // line buffer for 240px wide round display
@@ -235,7 +234,7 @@ int main(void)
 
 
 
-  Create_Gauge(scr, &g_egt,  "EGT",   lv_color_hex(0xF65C00),   0, 1200, 225, 315,    0, -60,   0, -40);
+  Create_Gauge(scr, &g_egt,  "EGT",   lv_color_hex(0xF65C00),   0, 1300, 225, 315,    0, -60,   0, -40);
   Create_Gauge(scr, &g_oilT, "OilT",  lv_color_hex(0xFFB000),   0,  100, 315,  45,   40, -10,  40,  10);   // reverse sweep (NW→NE)
   Create_Gauge(scr, &g_amb,  "Amb",   lv_color_hex(0x00D1B2), -400,  800,  45, 135,    0,  60,   0,  40);
   Create_Gauge(scr, &g_oilP, "OilP",  lv_color_hex(0x58A6FF),   0,  100, 135, 225,  -40, -10, -40,  10);
@@ -253,9 +252,15 @@ int main(void)
 		uint16_t press_adc = ADC_ReadAvg(16,&hadc2);
 		float oilTemp = ADC_To_Temperature(temp_adc);
 		float oilPress = ADC_ToBar(press_adc);
-		float egtTemp = 1100.0f; // replace with real
+		float egtTemp = MAX31856_ReadThermocoupleTemp(); // replace with real
 
-		Gauge_Update(&g_egt,  egtTemp,   (int32_t)egtTemp,         "%4.0f");
+		if(MAX31856_ReadFault == 0xFF){
+			Gauge_Update(&g_egt,  egtTemp,   (int32_t)egtTemp,         "%4.0f");
+		}
+		else{
+			Gauge_Update(&g_egt,  0.0f,   (int32_t)egtTemp,         "FAULT");
+		}
+
 		Gauge_Update(&g_oilT, oilTemp,   (int32_t)oilTemp,         "%4.1f");
 		Gauge_Update(&g_oilP, oilPress,  (int32_t)(oilPress * 10), "%4.1f");
 		Gauge_Update(&g_amb,  a.temp,   (int32_t)(a.temp * 10),  "%4.1f");
