@@ -117,16 +117,6 @@ static void GC9A01_SetAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint1
     // Write to RAM
     GC9A01_WriteCommand(0x2C);
 }
-void GC9A01_DrawPixel(int32_t x, int32_t y, uint16_t color)
-{
-    if (x >= _width || y >= _height) return;
-    uint8_t data[2] = { color >> 8, color & 0xFF };
-    GC9A01_SetAddressWindow(x, y, x, y);
-    GC9A01_Select();
-    GC9A01_DC_Data();
-    HAL_SPI_Transmit(&GC9A01_SPI, data, 2, HAL_MAX_DELAY);
-    GC9A01_Unselect();
-}
 
 
 
