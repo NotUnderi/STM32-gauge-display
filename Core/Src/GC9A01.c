@@ -74,7 +74,7 @@ void GC9A01_Init(void)
 
     cmd = 0xFE; HAL_SPI_Transmit(&GC9A01_SPI, &cmd, 1, HAL_MAX_DELAY);
     cmd = 0xEF; HAL_SPI_Transmit(&GC9A01_SPI, &cmd, 1, HAL_MAX_DELAY);
-    GC90A1_Unselect();
+    GC9A01_Unselect();
 
     //Memory access control
     GC9A01_WriteCommand(0x36);

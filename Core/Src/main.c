@@ -25,6 +25,7 @@
 #include "GC9A01.h"
 #include "AHT20.h"
 #include "lvgl.h"
+#include "MAX31856.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -254,7 +255,7 @@ int main(void)
 		float oilPress = ADC_ToBar(press_adc);
 		float egtTemp = MAX31856_ReadThermocoupleTemp(); // replace with real
 
-		if(MAX31856_ReadFault == 0xFF){
+		if(MAX31856_ReadFault() == 0xFF){
 			Gauge_Update(&g_egt,  egtTemp,   (int32_t)egtTemp,         "%4.0f");
 		}
 		else{
