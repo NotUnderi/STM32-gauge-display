@@ -30,7 +30,34 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+static uint8_t switch_state = 1;        // assume released at start (pull-up)
+static uint8_t switch_last_read = 1;
+static uint32_t switch_last_time = 0;
+float oilTemp, oilPress, egtTemp;
+lv_obj_t *cont_multi;
+lv_obj_t *cont_single;
+static DisplayState display_state = MULTI;
+static DisplayState prev_state = -1;
 
+
+uint8_t Get_Switch1(void)
+{
+    uint8_t raw = HAL_GPIO_ReadPin(SWITCH1_GPIO_Port, SWITCH1_Pin);
+    uint32_t now = HAL_GetTick();
+
+    if (raw != switch_last_read)
+    {
+        switch_last_time = now;
+        switch_last_read = raw;
+    }
+
+    if ((now - switch_last_time) >= 20)
+    {
+        switch_state = raw;  // stable state
+    }
+
+    return switch_state;  // GPIO_PIN_SET or GPIO_PIN_RESET
+}
 
 
 int _write(int file, char *ptr, int len)
@@ -60,8 +87,10 @@ static const TempPoint tempTable[] = {
     {160.0f, 24.4f},
     {170.0f, 19.8f},
 };
-static QuadGauge g_egt, g_oilT, g_oilP, g_amb;
+static QuadGauge g_egt, g_oilT, g_oilP, g_amb,g_single;
 
+static void ShowSingleGauge(QuadGauge *g);
+static void Gauge_Switch(void);
 /**
  *
  * @param min Value which arc is empty
@@ -77,7 +106,7 @@ static void Create_Gauge(lv_obj_t *parent, QuadGauge *g,
                           uint16_t start_deg, uint16_t end_deg,
                           lv_coord_t title_dx, lv_coord_t title_dy,
                           lv_coord_t value_dx, lv_coord_t value_dy);
-static void Gauge_Update(QuadGauge *g, float val, int32_t arc_val, const char *fmt);
+static void Gauge_Update(QuadGauge *g, float val, int32_t arc_val, const char *fmt, const char *title);
 
 uint16_t ADC_ReadRaw(ADC_HandleTypeDef* hadc)
 {
@@ -223,6 +252,7 @@ int main(void)
 
   lv_init();
   static uint16_t buf1[240 * 40];   // line buffer for 240px wide round display
+
   lv_display_t *disp = lv_display_create(240, 240);
   lv_display_set_flush_cb(disp, ILI_flush);
   lv_display_set_buffers(disp, buf1, NULL, sizeof(buf1),
@@ -232,13 +262,27 @@ int main(void)
   lv_obj_t *scr = lv_display_get_screen_active(disp);
   lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  cont_multi  = lv_obj_create(scr);
+  cont_single = lv_obj_create(scr);
+  lv_obj_remove_style_all(cont_multi);
+  lv_obj_remove_style_all(cont_single);
+  lv_obj_set_size(cont_multi,  240, 240);
+  lv_obj_set_size(cont_single, 240, 240);
+  lv_obj_set_pos(cont_multi,  0, 0);
+  lv_obj_set_pos(cont_single, 0, 0);
+  lv_obj_add_flag(cont_single, LV_OBJ_FLAG_HIDDEN);  // hide at startup
 
 
+  Create_Gauge(cont_multi, &g_egt,  "EGT",   lv_color_hex(0xF65C00),   0, 1300, 225, 315,    0, -60,   0, -40);
+  Create_Gauge(cont_multi, &g_oilT, "OilT",  lv_color_hex(0xFFB000),   0,  100, 315,  45,   40, -10,  40,  10);   // reverse sweep (NW→NE)
+  Create_Gauge(cont_multi, &g_amb,  "Amb",   lv_color_hex(0x00D1B2), -400,  800,  45, 135,    0,  60,   0,  40);
+  Create_Gauge(cont_multi, &g_oilP, "OilP",  lv_color_hex(0x58A6FF),   0,  100, 135, 225,  -40, -10, -40,  10);
+  Create_Gauge(cont_single, &g_single, "Oil Pressure", lv_color_hex(0x58A6FF),0,100,135,45,0,-20,0,10);
+  lv_obj_set_size(g_single.arc, 232, 232);  // near full-screen, leaves a small margin
+  lv_obj_center(g_single.arc);
+  lv_obj_set_style_arc_width(g_single.arc, 18, LV_PART_MAIN);
+  lv_obj_set_style_arc_width(g_single.arc, 18, LV_PART_INDICATOR);
 
-  Create_Gauge(scr, &g_egt,  "EGT",   lv_color_hex(0xF65C00),   0, 1300, 225, 315,    0, -60,   0, -40);
-  Create_Gauge(scr, &g_oilT, "OilT",  lv_color_hex(0xFFB000),   0,  100, 315,  45,   40, -10,  40,  10);   // reverse sweep (NW→NE)
-  Create_Gauge(scr, &g_amb,  "Amb",   lv_color_hex(0x00D1B2), -400,  800,  45, 135,    0,  60,   0,  40);
-  Create_Gauge(scr, &g_oilP, "OilP",  lv_color_hex(0x58A6FF),   0,  100, 135, 225,  -40, -10, -40,  10);
   lv_arc_set_mode(g_oilT.arc, LV_ARC_MODE_REVERSE);
 
 
@@ -248,68 +292,43 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  static uint8_t prev_sw = GPIO_PIN_SET;
+	  uint8_t sw = Get_Switch1();
+	  if (sw == GPIO_PIN_RESET && prev_sw == GPIO_PIN_SET) {
+	      display_state++;
+	      if (display_state >= EGT) display_state = 0;
+	  }
+	  prev_sw = sw;
 		AHT20_Data a = AHT20_Get();
 		uint16_t temp_adc = ADC_ReadAvg(16,&hadc1);
 		uint16_t press_adc = ADC_ReadAvg(16,&hadc2);
-		float oilTemp = ADC_To_Temperature(temp_adc);
-		float oilPress = ADC_ToBar(press_adc);
-		float egtTemp = MAX31856_ReadThermocoupleTemp(); // replace with real
+		oilTemp = ADC_To_Temperature(temp_adc);
+		oilPress = ADC_ToBar(press_adc);
+		egtTemp = MAX31856_ReadThermocoupleTemp();
 
 		if(MAX31856_ReadFault() == 0xFF){
-			Gauge_Update(&g_egt,  egtTemp,   (int32_t)egtTemp,         "%4.0f");
+			Gauge_Update(&g_egt,  egtTemp,   (int32_t)egtTemp,         "%4.0f","EGT");
 		}
 		else{
-			Gauge_Update(&g_egt,  0.0f,   (int32_t)egtTemp,         "FAULT");
+			Gauge_Update(&g_egt,  0.0f,   (int32_t)egtTemp,         "FAULT","EGT");
 		}
 
-		Gauge_Update(&g_oilT, oilTemp,   (int32_t)oilTemp,         "%4.1f");
-		Gauge_Update(&g_oilP, oilPress,  (int32_t)(oilPress * 10), "%4.1f");
-		Gauge_Update(&g_amb,  a.temp,   (int32_t)(a.temp * 10),  "%4.1f");
+		Gauge_Update(&g_oilT, oilTemp,   (int32_t)oilTemp,         "%4.1f","OilT");
+		Gauge_Update(&g_oilP, oilPress,  (int32_t)(oilPress * 10), "%4.1f","OilP");
+		Gauge_Update(&g_amb,  a.temp,   (int32_t)(a.temp * 10),  "%4.1f","Amb");
+
+		Gauge_Switch();
 		lv_timer_handler();
-		HAL_Delay(5);
+
+
+
+
+
+    /* USER CODE END WHILE */
+
+    /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
-}
-
-
-
-
-static void Create_Gauge(lv_obj_t *parent, QuadGauge *g,
-                          const char *title, lv_color_t color,
-                          int32_t min, int32_t max,
-                          uint16_t start_deg, uint16_t end_deg,
-                          lv_coord_t title_dx, lv_coord_t title_dy,
-                          lv_coord_t value_dx, lv_coord_t value_dy)
-{
-
-    g->arc = lv_arc_create(parent);
-    lv_obj_remove_style_all(g->arc);
-    lv_obj_set_size(g->arc, 200, 200);
-    lv_obj_center(g->arc);
-    lv_arc_set_bg_angles(g->arc, start_deg, end_deg);
-    lv_arc_set_range(g->arc, min, max);
-    lv_arc_set_value(g->arc, min);
-    lv_obj_set_style_arc_width(g->arc, 12, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(g->arc, 12, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_color(g->arc, lv_color_hex(0x303030), LV_PART_MAIN);
-    lv_obj_set_style_arc_color(g->arc, color, LV_PART_INDICATOR);
-
-    g->title = lv_label_create(parent);
-    lv_label_set_text(g->title, title);
-    lv_obj_set_style_text_color(g->title, color, 0);
-    lv_obj_align(g->title, LV_ALIGN_CENTER, title_dx, title_dy);
-
-    g->value = lv_label_create(parent);
-    lv_label_set_text(g->value, "--");
-    lv_obj_set_style_text_color(g->value, lv_color_white(), 0);
-    lv_obj_align(g->value, LV_ALIGN_CENTER, value_dx, value_dy);
-}
-static void Gauge_Update(QuadGauge *g, float val, int32_t arc_val, const char *fmt)
-{
-    char buf[16];
-    snprintf(buf, sizeof(buf), fmt, val);
-    lv_label_set_text(g->value, buf);
-    lv_arc_set_value(g->arc, arc_val);
 }
 
 /**
@@ -565,6 +584,7 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, ILI_RESET_Pin|ILI_D_C_Pin|ILI_CS_Pin, GPIO_PIN_RESET);
@@ -592,6 +612,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(EGT_FAULT_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : SWITCH1_Pin */
+  GPIO_InitStruct.Pin = SWITCH1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(SWITCH1_GPIO_Port, &GPIO_InitStruct);
+
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
   /* USER CODE END MX_GPIO_Init_2 */
@@ -599,6 +625,75 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+static void Create_Gauge(lv_obj_t *parent, QuadGauge *g,
+                          const char *title, lv_color_t color,
+                          int32_t min, int32_t max,
+                          uint16_t start_deg, uint16_t end_deg,
+                          lv_coord_t title_dx, lv_coord_t title_dy,
+                          lv_coord_t value_dx, lv_coord_t value_dy)
+{
+
+    g->arc = lv_arc_create(parent);
+    lv_obj_remove_style_all(g->arc);
+    lv_obj_set_size(g->arc, 200, 200);
+    lv_obj_center(g->arc);
+    lv_arc_set_bg_angles(g->arc, start_deg, end_deg);
+    lv_arc_set_range(g->arc, min, max);
+    lv_arc_set_value(g->arc, min);
+    lv_obj_set_style_arc_width(g->arc, 12, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(g->arc, 12, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(g->arc, lv_color_hex(0x303030), LV_PART_MAIN);
+    lv_obj_set_style_arc_color(g->arc, color, LV_PART_INDICATOR);
+
+    g->title = lv_label_create(parent);
+    lv_label_set_text(g->title, title);
+    lv_obj_set_style_text_color(g->title, color, 0);
+    lv_obj_align(g->title, LV_ALIGN_CENTER, title_dx, title_dy);
+
+    g->value = lv_label_create(parent);
+    lv_label_set_text(g->value, "--");
+    lv_obj_set_style_text_color(g->value, lv_color_white(), 0);
+    lv_obj_align(g->value, LV_ALIGN_CENTER, value_dx, value_dy);
+}
+static void Gauge_Update(QuadGauge *g, float val, int32_t arc_val, const char *fmt, const char *title)
+{
+    char buf[16];
+    snprintf(buf, sizeof(buf), fmt, val);
+    lv_label_set_text(g->value, buf);
+    lv_arc_set_value(g->arc, arc_val);
+    g->val = val;
+    g->title_str = title;
+}
+
+static void Gauge_Switch(void){
+	if (display_state == prev_state) return;
+	    prev_state = display_state;
+	switch(display_state) {
+	case MULTI:
+		lv_obj_clear_flag(cont_multi, LV_OBJ_FLAG_HIDDEN);
+		lv_obj_add_flag(cont_single, LV_OBJ_FLAG_HIDDEN);
+		break;
+	case OILP:
+		ShowSingleGauge(&g_oilP);
+		break;
+	case OILT:
+		ShowSingleGauge(&g_oilT);
+		break;
+	case EGT:
+		ShowSingleGauge(&g_egt);
+		break;
+	}
+}
+static void ShowSingleGauge(QuadGauge *g)
+{
+    lv_obj_add_flag(cont_multi, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(cont_single, LV_OBJ_FLAG_HIDDEN);
+
+    if(strcmp(g->title_str,"EGT")==0){lv_arc_set_range(g_single.arc,0,1300);}
+    else{lv_arc_set_range(g_single.arc,0,100);}
+    Gauge_Update(&g_single, g->val,(int32_t)g->val,"%4.1f",g->title_str);
+    lv_label_set_text(g_single.title, g->title_str);
+}
 /* USER CODE END 4 */
 
 /**
