@@ -47,8 +47,6 @@ void AHT20_Measure (void)
 AHT20_Data AHT20_Get(void){
 	AHT20_Data val;
 	AHT20_Measure();
-	printf("Humidity: %.2f %%RH | Temperature: %.2f °C\n", Humidity, Temperature);
-	printf("-------------------------------------------\n");
 	val.temp = Temperature;
 	val.humid = Humidity;
 	return val;

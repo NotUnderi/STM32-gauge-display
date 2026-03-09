@@ -53,6 +53,8 @@ typedef struct {
     lv_obj_t *value;
     float val;
     const char *title_str;
+    int32_t danger;
+    lv_color_t nom_color;
 } QuadGauge;
 
 typedef enum {
@@ -98,7 +100,7 @@ void Error_Handler(void);
 #define EGT_FAULT_GPIO_Port GPIOB
 #define EGT_DRDY_Pin GPIO_PIN_2
 #define EGT_DRDY_GPIO_Port GPIOB
-#define SWITCH1_Pin GPIO_PIN_8
+#define SWITCH1_Pin GPIO_PIN_3
 #define SWITCH1_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
