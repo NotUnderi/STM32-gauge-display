@@ -13,7 +13,7 @@ MCU := -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb
 DEFS := -DDEBUG -DLV_LVGL_H_INCLUDE_SIMPLE -DLV_CONF_INCLUDE_SIMPLE -DUSE_HAL_DRIVER -DSTM32F407xx
 INCLUDES := \
 	-ICore/Inc \
-	-IDrivers/lvgl \
+	-IDrivers/lvgl/src \
 	-IDrivers/STM32F4xx_HAL_Driver/Inc \
 	-IDrivers/STM32F4xx_HAL_Driver/Inc/Legacy \
 	-IDrivers/CMSIS/Device/ST/STM32F4xx/Include \

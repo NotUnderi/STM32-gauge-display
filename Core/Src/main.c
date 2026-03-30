@@ -38,6 +38,8 @@ lv_obj_t *cont_single;
 static DisplayState display_state = MULTI;
 static DisplayState prev_state = -1;
 
+int32_t debounce_tick;
+int32_t debounce_delay;
 
 uint8_t Get_Switch1(void)
 {
@@ -276,8 +278,8 @@ int main(void)
   Create_Gauge(cont_multi, &g_oilP, "OilP",  lv_color_hex(0xFFA658),   0,  80, 135, 225,  -40, -10, -40,  10);
   Create_Gauge(cont_single, &g_single, "OilP", lv_color_hex(0xFFA658),0,130,135,45,0,-20,0,10);
   
-  g_oilP.danger = 70;  // 7.0 bar (70/10)
-  g_egt.danger = 1000; // 1000°C
+  g_oilP.danger = 70;  
+  g_egt.danger = 1000;
   
   lv_obj_set_size(g_single.arc, 232, 232);  // near full-screen, leaves a small margin
   lv_obj_center(g_single.arc);
@@ -297,23 +299,13 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  static uint8_t prev_sw = GPIO_PIN_SET;
-	  uint8_t sw = Get_Switch1();
-	  if (sw == GPIO_PIN_RESET && prev_sw == GPIO_PIN_SET) {
-	      display_state++;
-	      if (display_state > EGT) display_state = 0;
-	  }
-	  prev_sw = sw;
 		AHT20_Data a = AHT20_Get();
 		uint16_t temp_adc = ADC_ReadAvg(16,&hadc1);
 		uint16_t press_adc = ADC_ReadAvg(16,&hadc2);
-		oilTemp = oil_test;//ADC_To_Temperature(temp_adc);
-		oilPress = oil_test/10;//ADC_ToBar(press_adc);
-		egtTemp = egt_test;//MAX31856_ReadThermocoupleTemp();
-    egt_test += 10.0f;
-    oil_test += 1.0f;
-    if(oil_test>150.0f){oil_test=0.0f;}
-    if(egt_test>1300.0f){egt_test=0.0f;}
+		oilTemp = ADC_To_Temperature(temp_adc);
+		oilPress = ADC_ToBar(press_adc);
+		egtTemp = MAX31856_ReadThermocoupleTemp();
+    
 		if(MAX31856_ReadFault() == 0xFF){
 			Gauge_Update(&g_egt,  egtTemp,   (int32_t)egtTemp,         "%4.0f","EGT");
 		}
@@ -624,11 +616,15 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(EGT_DRDY_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : SWITCH1_Pin */
-  GPIO_InitStruct.Pin = SWITCH1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  /*Configure GPIO pin : PE8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(SWITCH1_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -636,6 +632,17 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == GPIO_PIN_8) {
+        debounce_delay = HAL_GetTick();
+        if (debounce_delay - debounce_tick < 50)
+          return; 
+        display_state++;
+        if (display_state > EGT) display_state = 0;
+    }
+}
 
 static void Create_Gauge(lv_obj_t *parent, QuadGauge *g,
                           const char *title, lv_color_t color,
