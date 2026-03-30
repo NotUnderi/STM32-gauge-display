@@ -30,17 +30,14 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-static uint8_t switch_state = 1;        // assume released at start (pull-up)
-static uint8_t switch_last_read = 1;
-static uint32_t switch_last_time = 0;
 float oilTemp, oilPress, egtTemp;
 lv_obj_t *cont_multi;
 lv_obj_t *cont_single;
 static DisplayState display_state = MULTI;
 static DisplayState prev_state = -1;
 
-int32_t debounce_tick;
-int32_t debounce_delay;
+uint32_t debounce_tick;
+uint32_t debounce_delay;
 
 int _write(int file, char *ptr, int len)
 {
