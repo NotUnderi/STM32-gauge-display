@@ -21,6 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <string.h>
 #include "GC9A01.h"
 #include "AHT20.h"
 #include "lvgl.h"
@@ -40,26 +41,6 @@ static DisplayState prev_state = -1;
 
 int32_t debounce_tick;
 int32_t debounce_delay;
-
-uint8_t Get_Switch1(void)
-{
-    uint8_t raw = HAL_GPIO_ReadPin(SWITCH1_GPIO_Port, SWITCH1_Pin);
-    uint32_t now = HAL_GetTick();
-
-    if (raw != switch_last_read)
-    {
-        switch_last_time = now;
-        switch_last_read = raw;
-    }
-
-    if ((now - switch_last_time) >= 20)
-    {
-        switch_state = raw;  // stable state
-    }
-
-    return switch_state;  // GPIO_PIN_SET or GPIO_PIN_RESET
-}
-
 
 int _write(int file, char *ptr, int len)
 {
@@ -290,9 +271,7 @@ int main(void)
 
 
   lv_arc_set_mode(g_oilT.arc, LV_ARC_MODE_REVERSE);
-  
-  float egt_test = 0.0f;
-  float oil_test = 0.0f;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -305,7 +284,7 @@ int main(void)
 		oilTemp = ADC_To_Temperature(temp_adc);
 		oilPress = ADC_ToBar(press_adc);
 		egtTemp = MAX31856_ReadThermocoupleTemp();
-    
+
 		if(MAX31856_ReadFault() == 0xFF){
 			Gauge_Update(&g_egt,  egtTemp,   (int32_t)egtTemp,         "%4.0f","EGT");
 		}
@@ -684,7 +663,7 @@ static void Gauge_Update(QuadGauge *g, float val, int32_t arc_val, const char *f
     g->val = val;
     g->title_str = title;
     
-    printf("%s: %d\n", title, arc_val);
+    printf("%s: %ld\n", title, arc_val);
     
     // In single gauge mode, set correct range (scaling already applied at call site)
     if (display_state > 0) {
