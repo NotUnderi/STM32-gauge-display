@@ -23,7 +23,6 @@
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include "GC9A01.h"
-#include "AHT20.h"
 #include "lvgl.h"
 #include "MAX31856.h"
 /* USER CODE END Includes */
@@ -36,8 +35,7 @@ lv_obj_t *cont_single;
 static DisplayState display_state = MULTI;
 static DisplayState prev_state = -1;
 
-uint32_t debounce_tick;
-uint32_t debounce_delay;
+volatile uint32_t debounce_tick = 0;
 
 int _write(int file, char *ptr, int len)
 {
@@ -66,7 +64,7 @@ static const TempPoint tempTable[] = {
     {160.0f, 24.4f},
     {170.0f, 19.8f},
 };
-static QuadGauge g_egt, g_oilT, g_oilP, g_amb,g_single;
+static QuadGauge g_egt, g_oilT, g_oilP,g_single;
 QuadGauge* g_curr = &g_oilP; // pointer to currently displayed gauge in single mode
 
 
@@ -154,6 +152,7 @@ float ADC_ToBar(uint16_t adcv)
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define DEBOUNCE_DELAY 50
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -223,7 +222,6 @@ int main(void)
   MX_ADC1_Init();
   MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
-  AHT20_Init();
   GC9A01_Init();
 //  GC9A01_SetRotation(1);
 
@@ -252,7 +250,6 @@ int main(void)
 
   Create_Gauge(cont_multi, &g_egt,  "EGT",   lv_color_hex(0x005CF6),   0, 1300, 225, 315,    0, -60,   0, -40);
   Create_Gauge(cont_multi, &g_oilT, "OilT",  lv_color_hex(0x00B0FF),   0,  130, 315,  45,   40, -10,  40,  10);   // reverse sweep (NW→NE)
-  Create_Gauge(cont_multi, &g_amb,  "Amb",   lv_color_hex(0xB2D100), 0,  300,  45, 135,    0,  60,   0,  40);
   Create_Gauge(cont_multi, &g_oilP, "OilP",  lv_color_hex(0xFFA658),   0,  80, 135, 225,  -40, -10, -40,  10);
   Create_Gauge(cont_single, &g_single, "OilP", lv_color_hex(0xFFA658),0,130,135,45,0,-20,0,10);
   
@@ -275,7 +272,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-		AHT20_Data a = AHT20_Get();
 		uint16_t temp_adc = ADC_ReadAvg(16,&hadc1);
 		uint16_t press_adc = ADC_ReadAvg(16,&hadc2);
 		oilTemp = ADC_To_Temperature(temp_adc);
@@ -291,7 +287,6 @@ int main(void)
 
 		Gauge_Update(&g_oilT, oilTemp,   (int32_t)oilTemp,         "%4.1f","OilT");
 		Gauge_Update(&g_oilP, oilPress,  (int32_t)(oilPress * 10), "%4.1f","OilP");
-		Gauge_Update(&g_amb,  a.temp,   (int32_t)(a.temp * 10),  "%4.1f","Amb");
 
     int32_t arc_val = (int32_t)g_curr->val;
     if (g_curr == &g_oilP) {
@@ -302,11 +297,6 @@ int main(void)
 
 		Gauge_Switch();
 		lv_timer_handler();
-
-
-
-
-
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -612,11 +602,11 @@ static void MX_GPIO_Init(void)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
     if (GPIO_Pin == GPIO_PIN_8) {
-        debounce_delay = HAL_GetTick();
-        if (debounce_delay - debounce_tick < 50)
-          return; 
+        if (HAL_GetTick() - debounce_tick < DEBOUNCE_DELAY)
+          return;   
         display_state++;
         if (display_state > EGT) display_state = 0;
+        debounce_tick = HAL_GetTick();
     }
 }
 
@@ -666,8 +656,6 @@ static void Gauge_Update(QuadGauge *g, float val, int32_t arc_val, const char *f
     if (display_state > 0) {
         if (strcmp(title, "OilP") == 0) {
             lv_arc_set_range(g->arc, 0, 80);
-        } else if (strcmp(title, "Amb") == 0) {
-            lv_arc_set_range(g->arc, 0, 300);
         } else if (strcmp(title, "OilT") == 0) {
             lv_arc_set_range(g->arc, 0, 130);
         } else if (strcmp(title, "EGT") == 0) {
