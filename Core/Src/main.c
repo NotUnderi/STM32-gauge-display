@@ -32,7 +32,7 @@
 float oilTemp, oilPress, egtTemp;
 lv_obj_t *cont_multi;
 lv_obj_t *cont_single;
-static DisplayState display_state = MULTI;
+volatile static DisplayState display_state = MULTI;
 static DisplayState prev_state = -1;
 
 volatile uint32_t debounce_tick = 0;
@@ -653,16 +653,21 @@ static void Gauge_Update(QuadGauge *g, float val, int32_t arc_val, const char *f
     printf("%s: %ld\n", title, arc_val);
     
     // In single gauge mode, set correct range (scaling already applied at call site)
-    if (display_state > 0) {
-        if (strcmp(title, "OilP") == 0) {
-            lv_arc_set_range(g->arc, 0, 80);
-        } else if (strcmp(title, "OilT") == 0) {
-            lv_arc_set_range(g->arc, 0, 130);
-        } else if (strcmp(title, "EGT") == 0) {
-            lv_arc_set_range(g->arc, 0, 1300);
-        }
-    }
-    
+    switch(display_state) {
+      case MULTI:
+          break; 
+      case OILP:
+          lv_arc_set_range(g->arc, 0, 80);
+          break;
+      case OILT:
+          lv_arc_set_range(g->arc, 0, 130);
+          break;
+      case EGT:
+          lv_arc_set_range(g->arc, 0, 1300);
+          break;
+      default:
+          break;
+    }    
     lv_arc_set_value(g->arc, arc_val);
     if (arc_val > g->danger) {
         lv_obj_set_style_text_color(g->value, lv_color_hex(0x0000FF), 0);
@@ -690,6 +695,8 @@ static void Gauge_Switch(void){
 	case EGT:
 		ShowSingleGauge(&g_egt);
 		break;
+  default:
+    break;  
 	}
 }
 static void ShowSingleGauge(QuadGauge *g)
