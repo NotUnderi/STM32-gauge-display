@@ -100,6 +100,9 @@ void Error_Handler(void);
 #define EGT_FAULT_GPIO_Port GPIOB
 #define EGT_DRDY_Pin GPIO_PIN_2
 #define EGT_DRDY_GPIO_Port GPIOB
+#define PCB_switch_Pin GPIO_PIN_8
+#define PCB_switch_GPIO_Port GPIOE
+#define PCB_switch_EXTI_IRQn EXTI9_5_IRQn
 
 /* USER CODE BEGIN Private defines */
 #define PRESSURE_MAX_PSI   150.0f
