@@ -110,7 +110,7 @@ float ADC_To_Temperature(uint16_t adc)
 {
 	float Rs;
 	if (adc==0){Rs = 1e9f;}
-	Rs = 330.0f * ((4095.0f/(float)adc)-1.0f);
+	Rs = 330.0f * ((4095.0f/(float)adc)-1.0f);      //4095 == 3.3v, Rs = (Vcc/Vout - 1)*Rref, Rref=330Ω
     int size = sizeof(tempTable)/sizeof(tempTable[0]);
 
     // Too cold (Rs higher than highest table value)
@@ -139,12 +139,12 @@ float ADC_To_Temperature(uint16_t adc)
 
 float ADC_ToBar(uint16_t adcv)
 {
-	float vsens = (3.3f * (float)adcv / 4095.0f)*1.5f;
+	float vsens = (3.3f * (float)adcv / 4095.0f)*1.5f; //0-3.3V becomes 0-4.95V, sensor output is 0.5..4.5V for 0..150psi, so multiply by 1.5 to scale 3.3V to 4.95V
     if (vsens < SENSOR_V_MIN) vsens = SENSOR_V_MIN;
     if (vsens > SENSOR_V_MAX) vsens = SENSOR_V_MAX;
 
-    float fraction = (vsens - SENSOR_V_MIN) / (SENSOR_V_MAX - SENSOR_V_MIN); // 0..1
-    return fraction * PRESSURE_MAX_PSI * 0.0689476f;
+    float fraction = (vsens - SENSOR_V_MIN) / (SENSOR_V_MAX - SENSOR_V_MIN); 
+    return fraction * PRESSURE_MAX_PSI * 0.0689476f;  // convert psi to bar (1 psi = 0.0689476 bar)
 }
 
 
@@ -238,8 +238,8 @@ int main(void)
   cont_single = lv_obj_create(scr);
   lv_obj_remove_style_all(cont_multi);
   lv_obj_remove_style_all(cont_single);
-  lv_obj_set_size(cont_multi,  240, 240);
-  lv_obj_set_size(cont_single, 240, 240);
+  lv_obj_set_size(cont_multi,  LV_HOR_RES_MAX, LV_VER_RES_MAX);
+  lv_obj_set_size(cont_single, LV_HOR_RES_MAX, LV_VER_RES_MAX);
   lv_obj_set_pos(cont_multi,  0, 0);
   lv_obj_set_pos(cont_single, 0, 0);
   lv_obj_add_flag(cont_single, LV_OBJ_FLAG_HIDDEN);  // hide at startup
@@ -253,7 +253,7 @@ int main(void)
   g_oilP.danger = 70;  
   g_egt.danger = 1000;
   
-  lv_obj_set_size(g_single.arc, 232, 232);  // near full-screen, leaves a small margin
+  lv_obj_set_size(g_single.arc, LV_HOR_RES_MAX-8, LV_VER_RES_MAX-8);  // near full-screen, leaves a small margin
   lv_obj_center(g_single.arc);
   lv_obj_set_style_arc_width(g_single.arc, 18, LV_PART_MAIN);
   lv_obj_set_style_arc_width(g_single.arc, 18, LV_PART_INDICATOR);
@@ -269,8 +269,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-		uint16_t temp_adc = ADC_ReadAvg(16,&hadc1);
-		uint16_t press_adc = ADC_ReadAvg(16,&hadc2);
+    uint8_t samples = 16;
+		uint16_t temp_adc = ADC_ReadAvg(samples,&hadc1);
+		uint16_t press_adc = ADC_ReadAvg(samples,&hadc2);
 		oilTemp = ADC_To_Temperature(temp_adc);
 		oilPress = ADC_ToBar(press_adc);
 		egtTemp = MAX31856_ReadThermocoupleTemp();
@@ -600,7 +601,7 @@ static void Create_Gauge(lv_obj_t *parent, QuadGauge *g,
     lv_obj_set_style_arc_color(g->arc, lv_color_hex(0x303030), LV_PART_MAIN);
     lv_obj_set_style_arc_color(g->arc, color, LV_PART_INDICATOR);
     g->nom_color = color;
-    g->danger = (int32_t)max*0.8f; // default danger threshold at 90% of max
+    g->danger = (int32_t)max*0.8f; // default danger threshold at 80% of max
 
     g->title = lv_label_create(parent);
     lv_label_set_text(g->title, title);
@@ -627,13 +628,19 @@ static void Gauge_Update(QuadGauge *g, float val, int32_t arc_val, const char *f
       case MULTI:
           break; 
       case OILP:
-          lv_arc_set_range(g->arc, 0, 80);
+          lv_arc_set_range(g->arc, 0, g_oilP.danger);
+          lv_obj_set_style_text_color(g->value, g_oilP.nom_color, 0);
+          lv_obj_set_style_arc_color(g->arc, g_oilP.nom_color, LV_PART_INDICATOR);
           break;
       case OILT:
-          lv_arc_set_range(g->arc, 0, 130);
+          lv_arc_set_range(g->arc, 0, g_oilT.danger);
+           lv_obj_set_style_text_color(g->value, g_oilT.nom_color, 0);
+          lv_obj_set_style_arc_color(g->arc, g_oilT.nom_color, LV_PART_INDICATOR);
           break;
       case EGT:
-          lv_arc_set_range(g->arc, 0, 1300);
+          lv_arc_set_range(g->arc, 0, g_egt.danger);
+          lv_obj_set_style_text_color(g->value, g_egt.nom_color, 0);
+          lv_obj_set_style_arc_color(g->arc, g_egt.nom_color, LV_PART_INDICATOR);
           break;
       default:
           break;
